@@ -243,6 +243,8 @@
 
     function startGame() {
       if (running) return;
+      // 再スタート時：フィナーレ状態や出しっぱなしをクリア
+      holes.forEach(h => { h.root.classList.remove('finale'); h.down(); });
       running = true;
       score = 0; $score.textContent = score;
       timeLeft = GAME_SECONDS; $time.textContent = timeLeft;
