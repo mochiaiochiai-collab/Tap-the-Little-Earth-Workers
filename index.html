@@ -23,13 +23,13 @@
       min-height: 100dvh;
       overflow-x: hidden;
     }
-    .app { width: min(900px, 96vw); height: 100%; }
+    .app { width: min(900px, 96vw); }
     .card {
       position: relative;
       background: var(--panel);
       border: 2px solid rgba(0,0,0,0.06);
       border-radius: 28px; padding: 20px 50px 24px; box-shadow: 0 20px 50px rgba(31,41,55,0.12);
-      display: flex; flex-direction: column; height: 80%; overflow: hidden;
+      display: flex; flex-direction: column; height: auto; overflow: visible;
     }
     .card::before {
       content: ""; position: absolute; inset: -40px; z-index: 0; pointer-events: none;
@@ -48,11 +48,11 @@
     h1 { font-family: 'Freckle Face', 'Noto Sans JP', sans-serif; font-weight: 400; font-size: clamp(22px, 3.6vw, 34px); margin: 0; letter-spacing: .02em;
       background: linear-gradient(90deg, #ff2b8a, #ff65c3 50%, #ff2b8a 100%);
       -webkit-background-clip: text; color: transparent; }
-    h2 { font-family: 'Freckle Face', 'Noto Sans JP', sans-serif; font-weight: 400; font-size: clamp(16px); margin: 0; letter-spacing: .02em;
+    h2 { font-family: 'Freckle Face', 'Noto Sans JP', sans-serif; font-weight: 400; font-size: clamp(16px, 2.8vw, 22px); margin: 0; letter-spacing: .02em;
       background: linear-gradient(90deg, #ff2b8a, #ff65c3 50%, #ff2b8a 100%);
       -webkit-background-clip: text; color: transparent; }
     .titleblock { display: flex; flex-direction: column; gap: 4px; }
-    .subtitle { font-family: 'Noto Sans JP', system-ui, -apple-system, Segoe UI, Roboto, sans-serif; font-size: clamp(12px, 1.8vw, 14px); line-height: 1.6; color: #475569; margin: 4px 0 0; }
+    .subtitle { font-family: 'Noto Sans JP', system-ui, -apple-system, Segoe UI, Roboto, sans-serif; font-size: clamp(10px, 1.8vw, 14px); line-height: 1.6; color: #475569; margin: 4px 0 0; }
     .controls { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; align-items: stretch; }
     .controls button {
       appearance: none; border: 0; border-radius: 999px; padding: 10px 16px;
@@ -98,7 +98,18 @@
       filter: blur(18px) saturate(110%);
       mix-blend-mode: multiply;
     }
-    .holes { display: grid; grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(3, 1fr); gap: 14px; height: 100%; }
+    /* --- Desktop: board + sidebar layout --- */
+    .playwrap { display: block; }
+    .sidebar { display: none; }
+    @media (min-width: 980px) {
+      body { align-items: start; } /* avoid vertical cut on desktop */
+      .playwrap { display: grid; grid-template-columns: minmax(0, 1fr) 240px; gap: 16px; align-items: start; }
+      .sidebar { display: flex; flex-direction: column; gap: 12px; }
+      .sidebar .controls { margin-top: 0; }
+      .sidebar .controls button { width: 100%; min-width: 0; }
+      .sidebar .hud { margin: 0; grid-template-columns: 1fr; }
+    }
+    .holes { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); grid-template-rows: repeat(3, minmax(0, 1fr)); grid-auto-flow: row; gap: 14px; width: 100%; height: 100%; }
     .hole {
       position: relative; background: linear-gradient(180deg, #e7d3bd, #d9c2a8);
       border-radius: 18px; border: 1px solid rgba(63, 48, 30, .18); overflow: hidden;
@@ -175,9 +186,12 @@
         <div>Best<br><span id="best" class="value">0</span></div>
       </div>
 
-      <div class="board" id="board">
-        <div class="holes" id="holes"></div>
-        <div class="countdown" id="countdown" hidden></div>
+      <div class="playwrap" id="playwrap">
+        <div class="board" id="board">
+          <div class="holes" id="holes"></div>
+          <div class="countdown" id="countdown" hidden></div>
+        </div>
+        <aside class="sidebar" id="sidebar"></aside>
       </div>
 
       <footer id="ftr">
@@ -220,6 +234,26 @@
     const $hdr = document.getElementById('hdr');
     const $hudEl = document.getElementById('hud');
     const $ftr = document.getElementById('ftr');
+    const $sidebar = document.getElementById('sidebar');
+    const $titleblock = document.querySelector('.titleblock');
+    const $controlsBox = document.querySelector('.controls');
+    const $playwrap = document.getElementById('playwrap');
+
+    // responsive relocation: move controls+HUD to sidebar on desktop
+    const mq = window.matchMedia('(min-width: 980px)');
+    function moveToSidebar(){
+      if ($controlsBox && $controlsBox.parentElement !== $sidebar) $sidebar.appendChild($controlsBox);
+      if ($hudEl && $hudEl.parentElement !== $sidebar) $sidebar.appendChild($hudEl);
+    }
+    function moveToMobile(){
+      if ($controlsBox && $controlsBox.parentElement !== $titleblock) $titleblock.appendChild($controlsBox);
+      if ($hudEl && $playwrap && $hudEl.parentElement !== document.querySelector('.card')) {
+        document.querySelector('.card').insertBefore($hudEl, $playwrap);
+      }
+    }
+    function applyResponsive(){ if (mq.matches) moveToSidebar(); else moveToMobile(); }
+    if (mq.addEventListener) mq.addEventListener('change', applyResponsive); else mq.addListener(applyResponsive);
+    applyResponsive();
 
     // precise schedulers
     let timeTO = null; // countdown timeout id
@@ -436,5 +470,3 @@
   </script>
 </body>
 </html>
-
-
