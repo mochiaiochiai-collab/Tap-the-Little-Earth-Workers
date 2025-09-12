@@ -119,6 +119,31 @@
     footer:empty { margin: 0; height: 0; padding: 0; }
     a { color: var(--accent); }
 
+    /* Emphasize START button (same size, glowing pulse) */
+    #startBtn {
+      border: 2px solid rgba(255, 183, 3, .6);
+      box-shadow: 0 8px 20px rgba(190,120,20,.25), 0 0 0 0 rgba(255,183,3,.45);
+      animation: pulseGlow 1.8s ease-out infinite;
+    }
+    #startBtn.running, #startBtn:disabled { animation: none; opacity: .9; }
+    @keyframes pulseGlow {
+      0%   { box-shadow: 0 8px 20px rgba(190,120,20,.25), 0 0 0 0 rgba(255,183,3,.45); }
+      70%  { box-shadow: 0 8px 20px rgba(190,120,20,.25), 0 0 0 14px rgba(255,183,3,0); }
+      100% { box-shadow: 0 8px 20px rgba(190,120,20,.25), 0 0 0 0 rgba(255,183,3,0); }
+    }
+    @media (prefers-reduced-motion: reduce) { #startBtn { animation: none; } }
+
+    /* Countdown overlay */
+    .countdown {
+      position: absolute; inset: 0; display: grid; place-items: center;
+      font-family: 'Freckle Face', 'Noto Sans JP', sans-serif;
+      font-size: clamp(56px, 16vw, 140px);
+      color: #fff; text-shadow: 0 4px 16px rgba(0,0,0,.45);
+      pointer-events: none; user-select: none;
+    }
+    .countdown.show { animation: pop .6s ease-out both; }
+    @keyframes pop { from { transform: scale(.6); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+
     /* Finale wobble animation */
     @keyframes wobble { 0%{ transform: translateY(0) rotate(0deg);} 25%{ transform: translateY(-2%) rotate(-3deg);} 50%{ transform: translateY(0) rotate(0deg);} 75%{ transform: translateY(-2%) rotate(3deg);} 100%{ transform: translateY(0) rotate(0deg);} }
     .finale .sprite { animation: wobble 1.1s ease-in-out infinite; }
@@ -136,7 +161,7 @@
       <header id="hdr">
         <div class="titleblock">
           <h1>Tap the Little Earth Workers</h1>
-          <p class="subtitle">ここは豊かな土壌が自慢の畑。元気な微生物がたくさんいるよ！穴から出てくる微生物をタップしてスコアを稼ごう！外すと−1点。時間が0になると、みんなでダンスすよ！</p>
+          <p class="subtitle">ここは豊かな土壌が自慢の畑。元気な微生物がたくさんいるよ！<br>穴から出てくる微生物をタップしてスコアを稼ごう！<br>外すと−1点。時間が0になると、みんなでダンスするよ！</p>
           <div class="controls">
             <button id="startBtn">START</button>
             <button id="stopBtn" class="secondary">STOP</button>
@@ -152,6 +177,7 @@
 
       <div class="board" id="board">
         <div class="holes" id="holes"></div>
+        <div class="countdown" id="countdown" hidden></div>
       </div>
 
       <footer id="ftr">
@@ -202,6 +228,7 @@
     let timer = null;
     let spawner = null;
     let running = false;
+    let countingDown = false;
     let timeLeft = GAME_SECONDS;
     let score = 0;
     let best = Number(localStorage.getItem('microbe-best') || 0);
@@ -230,7 +257,7 @@
       let up = false;
       let hideTO = null;
       zone.addEventListener('pointerdown', () => {
-        if (!running) return;
+        if (!running || countingDown) return;
         if (up) {
           score++;
           $score.textContent = score;
@@ -272,21 +299,27 @@
       running = true;
       score = 0; $score.textContent = score;
       timeLeft = GAME_SECONDS; $time.textContent = timeLeft;
+      // lock start during countdown
+      $start.classList.add('running'); $start.disabled = true; countingDown = true;
       // ensure assets are loaded before starting to avoid first-frame lag
       if (!assetsReady) { try { await assetsPromise; } catch (e) { /* ignore */ } }
 
+      await runCountdown();
+      countingDown = false;
       startSpawner();
       startTimer();
     }
 
     function stopGame() {
-      if (!running) return;
+      if (!running || countingDown) return;
       running = false;
       clearInterval(spawner); spawner = null; // legacy
       clearInterval(timer); timer = null;     // legacy
       clearTimeout(spawnTO); spawnTO = null;  // new precise
       clearTimeout(timeTO); timeTO = null;    // new precise
       holes.forEach(h => h.down());
+      const cd = document.getElementById('countdown'); if (cd){ cd.hidden = true; cd.textContent=''; cd.classList.remove('show'); }
+      countingDown = false; $start.disabled = false; $start.classList.remove('running');
       if (score > best) {
         best = score; localStorage.setItem('microbe-best', String(best));
         $best.textContent = best;
@@ -312,12 +345,36 @@
       })));
     }
 
+    function delay(ms){ return new Promise(r => setTimeout(r, ms)); }
+    async function runCountdown(){
+      const el = document.getElementById('countdown');
+      if (!el) return;
+      el.hidden = false;
+      // 3 と 2 は通常表示
+      for (const n of [3,2]){
+        el.textContent = n;
+        el.classList.remove('show');
+        void el.offsetWidth; // restart animation
+        el.classList.add('show');
+        await delay(1000);
+      }
+      // 1 は短く見せて即消す
+      el.textContent = 1;
+      el.classList.remove('show');
+      void el.offsetWidth;
+      el.classList.add('show');
+      await delay(1000);
+      el.hidden = true;
+      el.textContent = '';
+      el.classList.remove('show');
+    }
+
     // drift-free countdown using performance.now()
     function startTimer() {
       const startTs = performance.now();
       const endTs = startTs + GAME_SECONDS * 1000;
       function tick() {
-        if (!running) return;
+        if (!running || countingDown) return;
         const now = performance.now();
         const secs = Math.max(0, Math.ceil((endTs - now) / 1000));
         $time.textContent = secs;
@@ -331,7 +388,7 @@
     // timeout-based spawner (avoids setInterval jitter)
     function startSpawner() {
       function loop() {
-        if (!running) return;
+        if (!running || countingDown) return;
         const candidates = holes.filter(h => !h.up);
         if (candidates.length) {
           const h = candidates[Math.floor(Math.random() * candidates.length)];
